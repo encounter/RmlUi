@@ -50,6 +50,10 @@ public:
 		size_t compile_shader;
 		size_t render_shader;
 		size_t release_shader;
+		size_t push_layer;
+		size_t composite_layers;
+		size_t pop_layer;
+		size_t save_layer_as_mask_image;
 	};
 
 	Rml::CompiledGeometryHandle CompileGeometry(Rml::Span<const Rml::Vertex> vertices, Rml::Span<const int> indices) override;
@@ -70,6 +74,12 @@ public:
 
 	Rml::CompiledFilterHandle CompileFilter(const Rml::String& name, const Rml::Dictionary& parameters) override;
 	void ReleaseFilter(Rml::CompiledFilterHandle filter) override;
+
+	Rml::LayerHandle PushLayer() override;
+	void CompositeLayers(Rml::LayerHandle source, Rml::LayerHandle destination, Rml::BlendMode blend_mode,
+		Rml::Span<const Rml::CompiledFilterHandle> filters) override;
+	void PopLayer() override;
+	Rml::CompiledFilterHandle SaveLayerAsMaskImage() override;
 
 	Rml::CompiledShaderHandle CompileShader(const Rml::String& name, const Rml::Dictionary& parameters) override;
 	void RenderShader(Rml::CompiledShaderHandle shader, Rml::CompiledGeometryHandle geometry, Rml::Vector2f translation,

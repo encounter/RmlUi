@@ -19,6 +19,15 @@ CompiledFilter FilterBlur::CompileFilter(Element* element) const
 	return element->GetRenderManager()->CompileFilter("blur", Dictionary{{"sigma", Variant(radius)}});
 }
 
+FilterLayerOperation FilterBlur::GetLayerOperation(Element* element, FilterLayerState input_state) const
+{
+	if (input_state == FilterLayerState::Discarded)
+		return FilterLayerOperation::Identity;
+
+	const float radius = element->ResolveLength(sigma_value);
+	return Math::IsCloseToZero(radius) || radius < 0.f ? FilterLayerOperation::Identity : FilterLayerOperation::Push;
+}
+
 void FilterBlur::ExtendInkOverflow(Element* element, Rectanglef& scissor_region) const
 {
 	const float sigma = element->ResolveLength(sigma_value);

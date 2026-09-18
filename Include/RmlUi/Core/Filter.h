@@ -10,6 +10,17 @@ class Element;
 class PropertyDictionary;
 class CompiledFilter;
 
+enum class FilterLayerOperation {
+	Push,
+	Identity,
+	Discard,
+};
+
+enum class FilterLayerState {
+	Content,
+	Discarded,
+};
+
 /**
     The abstract base class for visual filters that are applied when rendering the element.
  */
@@ -22,6 +33,13 @@ public:
 	/// @param[in] element The element the filter will be applied to.
 	/// @return A compiled filter constructed through the render manager, or a default-constructed one to indicate an error.
 	virtual CompiledFilter CompileFilter(Element* element) const = 0;
+
+	/// Called to determine how this filter affects the current layer contents.
+	/// @param[in] element The element the filter will be applied to.
+	/// @param[in] input_state Whether the input to this filter is known to contain rendered content, or known to be fully discarded.
+	/// @return The operation needed to apply this filter to the input layer.
+	/// @note Custom filters default to Push, even for discarded input, since they may produce pixels without sampling the input.
+	virtual FilterLayerOperation GetLayerOperation(Element* element, FilterLayerState input_state) const;
 
 	/// Called to allow extending the area being affected by this filter beyond the border box of the element.
 	/// @param[in] element The element the filter is being rendered on.

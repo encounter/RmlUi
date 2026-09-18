@@ -191,6 +191,9 @@ void Element::Render()
 		BuildLocalStackingContext();
 
 	UpdateTransformState();
+	if (meta->effects.IsFilterOutputDiscarded())
+		return;
+
 	ElementUtilities::ApplyTransform(*this);
 
 	meta->effects.RenderEffects(RenderStage::Enter);

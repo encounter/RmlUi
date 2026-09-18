@@ -177,6 +177,29 @@ void TestsRenderInterface::ReleaseFilter(Rml::CompiledFilterHandle /*filter*/)
 	counters.release_filter += 1;
 }
 
+Rml::LayerHandle TestsRenderInterface::PushLayer()
+{
+	counters.push_layer += 1;
+	return Rml::LayerHandle(counters.push_layer);
+}
+
+void TestsRenderInterface::CompositeLayers(Rml::LayerHandle /*source*/, Rml::LayerHandle /*destination*/, Rml::BlendMode /*blend_mode*/,
+	Rml::Span<const Rml::CompiledFilterHandle> /*filters*/)
+{
+	counters.composite_layers += 1;
+}
+
+void TestsRenderInterface::PopLayer()
+{
+	counters.pop_layer += 1;
+}
+
+Rml::CompiledFilterHandle TestsRenderInterface::SaveLayerAsMaskImage()
+{
+	counters.save_layer_as_mask_image += 1;
+	return 1;
+}
+
 Rml::CompiledShaderHandle TestsRenderInterface::CompileShader(const Rml::String& /*name*/, const Rml::Dictionary& /*parameters*/)
 {
 	counters.compile_shader += 1;

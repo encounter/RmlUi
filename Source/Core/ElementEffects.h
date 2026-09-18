@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../Include/RmlUi/Core/CompiledFilterShader.h"
+#include "../../Include/RmlUi/Core/Filter.h"
 #include "../../Include/RmlUi/Core/Types.h"
 
 namespace Rml {
@@ -24,12 +25,19 @@ public:
 
 	void RenderEffects(RenderStage render_stage);
 
+	bool IsFilterOutputDiscarded();
+
 	// Mark effects as dirty and force them to reset themselves.
 	void DirtyEffects();
 	// Mark the element data of effects as dirty.
 	void DirtyEffectsData();
 
 private:
+	struct FilterChain {
+		bool has_push_operations = false;
+		bool output_discarded = false;
+	};
+
 	// Releases existing element data of effects, and regenerates it.
 	void ReloadEffectsData();
 	// Releases all existing effects and their element data.
@@ -45,8 +53,12 @@ private:
 	struct FilterEntry {
 		SharedPtr<const Filter> filter;
 		CompiledFilter compiled;
+		FilterLayerOperation layer_operation = FilterLayerOperation::Push;
 	};
 	using FilterEntryList = Vector<FilterEntry>;
+
+	FilterChain ComputeFilterChain(FilterEntryList& filter_list);
+	void UpdateFilterChains();
 
 	Element* element;
 
@@ -55,6 +67,11 @@ private:
 	DecoratorEntryList mask_images;
 	FilterEntryList filters;
 	FilterEntryList backdrop_filters;
+
+	bool filters_have_push_operations = false;
+	bool filters_output_discarded = false;
+	bool backdrop_filters_have_push_operations = false;
+	bool filter_chains_dirty = false;
 
 	// If set, a full reload is necessary.
 	bool effects_dirty = false;

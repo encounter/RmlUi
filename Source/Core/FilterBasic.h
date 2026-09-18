@@ -11,6 +11,8 @@ public:
 
 	CompiledFilter CompileFilter(Element* element) const override;
 
+	FilterLayerOperation GetLayerOperation(Element* element, FilterLayerState input_state) const override;
+
 private:
 	String name;
 	float value = 0.f;

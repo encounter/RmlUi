@@ -28,6 +28,7 @@ void ElementEffects::InstanceEffects()
 
 	RMLUI_ZoneScopedC(0xB22222);
 	ReleaseEffects();
+	filter_chains_dirty = true;
 
 	RenderManager* render_manager = element->GetRenderManager();
 	if (!render_manager)
@@ -124,11 +125,72 @@ void ElementEffects::InstanceEffects()
 	}
 }
 
+ElementEffects::FilterChain ElementEffects::ComputeFilterChain(FilterEntryList& filter_list)
+{
+	FilterChain result;
+	FilterLayerState input_state = FilterLayerState::Content;
+	bool discarded = false;
+
+	for (FilterEntry& entry : filter_list)
+	{
+		const FilterLayerOperation operation = entry.filter->GetLayerOperation(element, input_state);
+		entry.layer_operation = operation;
+
+		switch (operation)
+		{
+		case FilterLayerOperation::Push: input_state = FilterLayerState::Content; break;
+		case FilterLayerOperation::Identity: break;
+		case FilterLayerOperation::Discard:
+			input_state = FilterLayerState::Discarded;
+			discarded = true;
+			break;
+		}
+	}
+
+	// A chain that produces content again after discarding it is only possible with custom filters that ignore their
+	// input. This is a rare case not worth optimizing, so fall back to rendering every filter as usual.
+	if (discarded && input_state == FilterLayerState::Content)
+	{
+		for (FilterEntry& entry : filter_list)
+			entry.layer_operation = FilterLayerOperation::Push;
+	}
+
+	for (const FilterEntry& entry : filter_list)
+		result.has_push_operations |= (entry.layer_operation == FilterLayerOperation::Push);
+
+	result.output_discarded = (input_state == FilterLayerState::Discarded);
+	return result;
+}
+
+void ElementEffects::UpdateFilterChains()
+{
+	if (!filter_chains_dirty)
+		return;
+
+	filter_chains_dirty = false;
+
+	const FilterChain filter_chain = ComputeFilterChain(filters);
+	filters_have_push_operations = filter_chain.has_push_operations;
+	filters_output_discarded = filter_chain.output_discarded;
+
+	const FilterChain backdrop_chain = ComputeFilterChain(backdrop_filters);
+	backdrop_filters_have_push_operations = (!backdrop_chain.output_discarded && backdrop_chain.has_push_operations);
+}
+
+bool ElementEffects::IsFilterOutputDiscarded()
+{
+	InstanceEffects();
+	UpdateFilterChains();
+
+	return filters_output_discarded;
+}
+
 void ElementEffects::ReloadEffectsData()
 {
 	if (effects_data_dirty)
 	{
 		effects_data_dirty = false;
+		UpdateFilterChains();
 
 		bool decorator_data_failed = false;
 		for (DecoratorEntryList* list : {&decorators, &mask_images})
@@ -155,9 +217,16 @@ void ElementEffects::ReloadEffectsData()
 		{
 			for (FilterEntry& filter : *list)
 			{
-				filter.compiled = filter.filter->CompileFilter(element);
-				if (!filter.compiled)
-					filter_compile_failed = true;
+				if (filter.layer_operation == FilterLayerOperation::Push)
+				{
+					filter.compiled = filter.filter->CompileFilter(element);
+					if (!filter.compiled)
+						filter_compile_failed = true;
+				}
+				else
+				{
+					filter.compiled.Release();
+				}
 			}
 		}
 
@@ -180,6 +249,11 @@ void ElementEffects::ReleaseEffects()
 
 	filters.clear();
 	backdrop_filters.clear();
+
+	filters_have_push_operations = false;
+	filters_output_discarded = false;
+	backdrop_filters_have_push_operations = false;
+	filter_chains_dirty = false;
 }
 
 void ElementEffects::RenderEffects(RenderStage render_stage)
@@ -225,7 +299,10 @@ void ElementEffects::RenderEffects(RenderStage render_stage)
 		if (filter_id == PropertyId::Filter)
 		{
 			for (const auto& filter : filters)
-				filter.filter->ExtendInkOverflow(element, filter_region);
+			{
+				if (filter.layer_operation == FilterLayerOperation::Push)
+					filter.filter->ExtendInkOverflow(element, filter_region);
+			}
 		}
 
 		Math::ExpandToPixelGrid(filter_region);
@@ -239,21 +316,27 @@ void ElementEffects::RenderEffects(RenderStage render_stage)
 		Rectanglef filter_region = Rectanglef::MakeInvalid();
 		ElementUtilities::GetBoundingBox(filter_region, element, BoxArea::Border);
 		for (const auto& filter : backdrop_filters)
-			filter.filter->ExtendInkOverflow(element, filter_region);
+		{
+			if (filter.layer_operation == FilterLayerOperation::Push)
+				filter.filter->ExtendInkOverflow(element, filter_region);
+		}
 		Math::ExpandToPixelGrid(filter_region);
 		render_manager->SetScissorRegion(Rectanglei(filter_region));
 	};
+
+	const bool filter_layer_required = (filters_have_push_operations || !mask_images.empty());
+	const bool backdrop_filter_layer_required = backdrop_filters_have_push_operations;
 
 	if (render_stage == RenderStage::Enter)
 	{
 		const LayerHandle backdrop_source_layer = render_manager->GetTopLayer();
 
-		if (!filters.empty() || !mask_images.empty())
+		if (filter_layer_required)
 		{
 			render_manager->PushLayer();
 		}
 
-		if (!backdrop_filters.empty())
+		if (backdrop_filter_layer_required)
 		{
 			const LayerHandle backdrop_destination_layer = render_manager->GetTopLayer();
 
@@ -268,7 +351,10 @@ void ElementEffects::RenderEffects(RenderStage render_stage)
 
 			FilterHandleList filter_handles;
 			for (auto& filter : backdrop_filters)
-				filter.compiled.AddHandleTo(filter_handles);
+			{
+				if (filter.layer_operation == FilterLayerOperation::Push)
+					filter.compiled.AddHandleTo(filter_handles);
+			}
 
 			// Render the backdrop filters in the extended scissor region including any ink overflow.
 			render_manager->CompositeLayers(backdrop_source_layer, backdrop_temp_layer, BlendMode::Blend, filter_handles);
@@ -282,7 +368,7 @@ void ElementEffects::RenderEffects(RenderStage render_stage)
 	}
 	else if (render_stage == RenderStage::Exit)
 	{
-		if (!filters.empty() || !mask_images.empty())
+		if (filter_layer_required)
 		{
 			ApplyClippingRegion(PropertyId::Filter);
 
@@ -291,7 +377,10 @@ void ElementEffects::RenderEffects(RenderStage render_stage)
 			filter_handles.reserve(filters.size() + (mask_images.empty() ? 0 : 1));
 
 			for (auto& filter : filters)
-				filter.compiled.AddHandleTo(filter_handles);
+			{
+				if (filter.layer_operation == FilterLayerOperation::Push)
+					filter.compiled.AddHandleTo(filter_handles);
+			}
 
 			if (!mask_images.empty())
 			{
@@ -323,6 +412,7 @@ void ElementEffects::DirtyEffects()
 void ElementEffects::DirtyEffectsData()
 {
 	effects_data_dirty = true;
+	filter_chains_dirty = true;
 }
 
 } // namespace Rml

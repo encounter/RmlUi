@@ -1,6 +1,7 @@
 #include "../Common/TestsInterface.h"
 #include "../Common/TestsShell.h"
 #include <RmlUi/Core/CompiledFilterShader.h>
+#include <RmlUi/Core/ComputedValues.h>
 #include <RmlUi/Core/Context.h>
 #include <RmlUi/Core/Element.h>
 #include <RmlUi/Core/ElementDocument.h>
@@ -151,5 +152,185 @@ TEST_CASE("filter")
 	CHECK(counters.compile_filter == expected_compiled_filters.size());
 	CHECK(counters.release_filter == expected_compiled_filters.size());
 
+	TestsShell::ShutdownShell();
+}
+
+TEST_CASE("filter.layer_operations_identity")
+{
+	Context* context = TestsShell::GetContext();
+	REQUIRE(context);
+
+	ElementDocument* document = context->LoadDocumentFromMemory(R"(
+<rml>
+<head>
+	<style>
+		body { width: 200px; height: 200px; }
+		#target {
+			display: block;
+			width: 100px;
+			height: 100px;
+			background: white;
+			filter: opacity(1);
+		}
+	</style>
+</head>
+<body>
+	<div id="target"/>
+</body>
+</rml>
+)");
+	document->Show();
+
+	TestsRenderInterface* render_interface = TestsShell::GetTestsRenderInterface();
+	render_interface->ResetCounters();
+	TestsShell::RenderLoop();
+
+	Element* target = document->GetElementById("target");
+	REQUIRE(target);
+	CHECK(target->GetComputedValues().has_filter());
+
+	const auto& counters = render_interface->GetCounters();
+	CHECK(counters.compile_filter == 0);
+	CHECK(counters.push_layer == 0);
+	CHECK(counters.composite_layers == 0);
+	CHECK(counters.pop_layer == 0);
+
+	document->Close();
+	context->Update();
+	TestsShell::ShutdownShell();
+}
+
+TEST_CASE("filter.layer_operations_mixed_chain")
+{
+	Context* context = TestsShell::GetContext();
+	REQUIRE(context);
+
+	ElementDocument* document = context->LoadDocumentFromMemory(R"(
+<rml>
+<head>
+	<style>
+		body { width: 200px; height: 200px; }
+		#target {
+			display: block;
+			width: 100px;
+			height: 100px;
+			background: white;
+			filter: opacity(1) brightness(2);
+		}
+	</style>
+</head>
+<body>
+	<div id="target"/>
+</body>
+</rml>
+)");
+	document->Show();
+
+	TestsRenderInterface* render_interface = TestsShell::GetTestsRenderInterface();
+	render_interface->ResetCounters();
+	TestsShell::RenderLoop();
+
+	const auto& counters = render_interface->GetCounters();
+	CHECK(counters.compile_filter == 1);
+	CHECK(counters.push_layer == 1);
+	CHECK(counters.composite_layers == 1);
+	CHECK(counters.pop_layer == 1);
+
+	document->Close();
+	context->Update();
+	CHECK(counters.release_filter == 1);
+	TestsShell::ShutdownShell();
+}
+
+TEST_CASE("filter.layer_operations_discard")
+{
+	Context* context = TestsShell::GetContext();
+	REQUIRE(context);
+
+	ElementDocument* document = context->LoadDocumentFromMemory(R"(
+<rml>
+<head>
+	<style>
+		body { width: 200px; height: 200px; }
+		#target {
+			display: block;
+			width: 100px;
+			height: 100px;
+			background: white;
+			filter: opacity(0);
+		}
+		#target > div {
+			display: block;
+			width: 50px;
+			height: 50px;
+			background: red;
+		}
+	</style>
+</head>
+<body>
+	<div id="target"><div/></div>
+</body>
+</rml>
+)");
+	document->Show();
+
+	TestsRenderInterface* render_interface = TestsShell::GetTestsRenderInterface();
+	render_interface->ResetCounters();
+	TestsShell::RenderLoop();
+
+	const auto& counters = render_interface->GetCounters();
+	CHECK(counters.compile_filter == 0);
+	CHECK(counters.render_geometry == 0);
+	CHECK(counters.push_layer == 0);
+	CHECK(counters.composite_layers == 0);
+	CHECK(counters.pop_layer == 0);
+
+	document->Close();
+	context->Update();
+	TestsShell::ShutdownShell();
+}
+
+TEST_CASE("filter.layer_operations_backdrop_identity")
+{
+	Context* context = TestsShell::GetContext();
+	REQUIRE(context);
+
+	ElementDocument* document = context->LoadDocumentFromMemory(R"(
+<rml>
+<head>
+	<style>
+		body {
+			width: 200px;
+			height: 200px;
+			background: red;
+		}
+		#target {
+			display: block;
+			width: 100px;
+			height: 100px;
+			background: white;
+			backdrop-filter: opacity(1);
+		}
+	</style>
+</head>
+<body>
+	<div id="target"/>
+</body>
+</rml>
+)");
+	document->Show();
+
+	TestsRenderInterface* render_interface = TestsShell::GetTestsRenderInterface();
+	render_interface->ResetCounters();
+	TestsShell::RenderLoop();
+
+	const auto& counters = render_interface->GetCounters();
+	CHECK(counters.compile_filter == 0);
+	CHECK(counters.push_layer == 0);
+	CHECK(counters.composite_layers == 0);
+	CHECK(counters.pop_layer == 0);
+
+	document->Close();
+	context->Update();
 	TestsShell::ShutdownShell();
 }

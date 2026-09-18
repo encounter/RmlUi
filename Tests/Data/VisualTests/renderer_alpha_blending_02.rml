@@ -28,7 +28,8 @@
 			top: 0px;
 			left: 0px;
 		}
-		.filter { filter: opacity(1); }
+		/* A full-turn hue rotation is a visual no-op, but still forces the wheel to be rendered to a separate layer. */
+		.filter { filter: hue-rotate(360deg); }
 
 		.wheel > .rg { decorator: radial-gradient(#ff09 58%, transparent 60%); }
 		.wheel > .rb { decorator: radial-gradient(#f0f9 58%, transparent 60%); left: 130px; }

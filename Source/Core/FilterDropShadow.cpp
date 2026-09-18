@@ -30,6 +30,14 @@ CompiledFilter FilterDropShadow::CompileFilter(Element* element) const
 	return filter;
 }
 
+FilterLayerOperation FilterDropShadow::GetLayerOperation(Element* /*element*/, FilterLayerState input_state) const
+{
+	if (input_state == FilterLayerState::Discarded || color.alpha == 0)
+		return FilterLayerOperation::Identity;
+
+	return FilterLayerOperation::Push;
+}
+
 void FilterDropShadow::ExtendInkOverflow(Element* element, Rectanglef& scissor_region) const
 {
 	// Expand the ink overflow area to cover both the native element *and* its offset shadow w/blur.

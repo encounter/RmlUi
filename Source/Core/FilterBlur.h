@@ -12,6 +12,8 @@ public:
 
 	CompiledFilter CompileFilter(Element* element) const override;
 
+	FilterLayerOperation GetLayerOperation(Element* element, FilterLayerState input_state) const override;
+
 	void ExtendInkOverflow(Element* element, Rectanglef& scissor_region) const override;
 
 private:
