@@ -808,13 +808,20 @@ void ElementStyle::DirtyInheritedProperties()
 
 void ElementStyle::DirtyPropertiesWithUnits(Units units)
 {
+	std::optional<PropertyDictionary> substituted_shorthands;
+	SmallUnorderedSet<String> variable_dependencies;
+	Property property_storage;
+
 	// Dirty all the properties of this element that use the unit(s).
 	for (auto it = Iterate(); !it.AtEnd(); ++it)
 	{
 		auto name_property_pair = *it;
 		PropertyId id = name_property_pair.first;
-		const Property& property = name_property_pair.second;
-		if (Any(property.unit & units))
+		if (dirty_properties.Contains(id))
+			continue;
+		const Property* property = ResolveVariablesWithShorthandExpansion(GetPropertySources(), id, &name_property_pair.second,
+			substituted_shorthands, variable_dependencies, property_storage);
+		if (property && Any(property->unit & units))
 			DirtyProperty(id);
 	}
 }
