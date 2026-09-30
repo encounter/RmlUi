@@ -1282,6 +1282,9 @@ void ElementStyle::ComputeValue(Style::ComputedValues& values, float dp_ratio, V
 	case PropertyId::OverscrollBehavior:
 		values.overscroll_behavior((OverscrollBehavior)p->Get<int>());
 		break;
+	case PropertyId::Contain:
+		values.contain((Contain)p->Get<int>());
+		break;
 	case PropertyId::PointerEvents:
 		values.pointer_events((PointerEvents)p->Get<int>());
 		break;

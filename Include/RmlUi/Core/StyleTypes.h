@@ -116,6 +116,7 @@ namespace Style {
 	enum class TabIndex : uint8_t { None, Auto };
 	enum class Focus : uint8_t { None, Auto };
 	enum class OverscrollBehavior : uint8_t { Auto, Contain };
+	enum class Contain : uint8_t { None, Paint };
 	enum class PointerEvents : uint8_t { None, Auto };
 
 	using PerspectiveOrigin = LengthPercentage;

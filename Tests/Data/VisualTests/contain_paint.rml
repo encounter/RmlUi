@@ -1,0 +1,69 @@
+<rml>
+<head>
+	<title>Contain: paint</title>
+	<link type="text/rcss" href="../style.rcss"/>
+	<link rel="help" href="https://drafts.csswg.org/css-contain-2/#paint-containment" />
+	<meta name="Description" content="Paint containment clips overflowing content, and makes the element the containing block of absolutely positioned descendants." />
+	<style>
+		body {
+			display: block;
+			background: #ddd;
+			color: #444;
+		}
+		div.contain {
+			contain: paint;
+			border: 1dp black;
+			width: 200dp;
+			height: 80dp;
+			margin: 10dp 0;
+		}
+		div.wide {
+			width: 300dp;
+			height: 20dp;
+			color: #f00;
+			text-align: right;
+			background-color: #aaa;
+		}
+		div.absolute {
+			position: absolute;
+			top: 90dp;
+			left: 0;
+			width: 80dp;
+			height: 80dp;
+		}
+		div.list {
+			overflow: auto;
+			width: 200dp;
+			height: 120dp;
+			border: 1dp black;
+		}
+		div.row {
+			contain: paint;
+			height: 30dp;
+			margin: 5dp;
+			border-radius: 5dp;
+		}
+		.green { background-color: #7f7; }
+		.red { background-color: #f77; }
+	</style>
+</head>
+
+<body>
+<p>There should be no red visible, and the word 'fail' should not appear.</p>
+<div class="contain">
+	<div class="wide">FAIL</div>
+	LONG_WOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOORD&nbsp;FAIL
+	<div class="absolute red">Should not be visible</div>
+</div>
+<div class="list">
+	<div class="row green">1</div>
+	<div class="row green">2</div>
+	<div class="row green">3</div>
+	<div class="row green">4</div>
+	<div class="row green">5</div>
+	<div class="row green">6</div>
+	<div class="row green">7</div>
+	<div class="row green">8</div>
+</div>
+</body>
+</rml>

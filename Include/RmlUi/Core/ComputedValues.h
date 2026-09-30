@@ -136,6 +136,7 @@ namespace Style {
 			flex_basis_type(LengthPercentageAuto::Auto), row_gap_type(LengthPercentage::Length), column_gap_type(LengthPercentage::Length),
 
 			vertical_align_type(VerticalAlign::Baseline), drag(Drag::None), tab_index(TabIndex::None), overscroll_behavior(OverscrollBehavior::Auto),
+			contain(Contain::None),
 
 			has_mask_image(false), has_filter(false), has_backdrop_filter(false), has_box_shadow(false), text_overflow(TextOverflow::Clip)
 		{}
@@ -154,6 +155,7 @@ namespace Style {
 		Drag drag : 3;
 		TabIndex tab_index : 1;
 		OverscrollBehavior overscroll_behavior : 1;
+		Contain contain : 1;
 
 		bool has_mask_image : 1;
 		bool has_filter : 1;
@@ -289,6 +291,7 @@ namespace Style {
 		LengthPercentage  row_gap()                    const { return LengthPercentage(rare.row_gap_type, rare.row_gap); }
 		LengthPercentage  column_gap()                 const { return LengthPercentage(rare.column_gap_type, rare.column_gap); }
 		OverscrollBehavior overscroll_behavior()       const { return rare.overscroll_behavior; }
+		Contain           contain()                    const { return rare.contain; }
 		float             scrollbar_margin()           const { return rare.scrollbar_margin; }
 		bool              has_mask_image()             const { return rare.has_mask_image; }
 		bool              has_filter()                 const { return rare.has_filter; }
@@ -377,6 +380,7 @@ namespace Style {
 		void tab_index                 (TabIndex value)          { rare.tab_index                  = value; }
 		void image_color               (Colourb value)           { rare.image_color                = value; }
 		void overscroll_behavior       (OverscrollBehavior value){ rare.overscroll_behavior        = value; }
+		void contain                   (Contain value)           { rare.contain                    = value; }
 		void scrollbar_margin          (float value)             { rare.scrollbar_margin           = value; }
 		void has_mask_image            (bool value)              { rare.has_mask_image             = value; }
 		void has_filter                (bool value)              { rare.has_filter                 = value; }

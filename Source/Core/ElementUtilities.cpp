@@ -136,7 +136,8 @@ bool ElementUtilities::GetClippingRegion(Element* element, Rectanglei& out_clip_
 	{
 		const bool force_clip_current_element = (force_clip_self && clipping_element == element);
 		const ComputedValues& clip_computed = clipping_element->GetComputedValues();
-		const bool clip_enabled = (clip_computed.overflow_x() != Style::Overflow::Visible || clip_computed.overflow_y() != Style::Overflow::Visible);
+		const bool overflow_clip = (clip_computed.overflow_x() != Style::Overflow::Visible || clip_computed.overflow_y() != Style::Overflow::Visible);
+		const bool clip_enabled = (overflow_clip || clip_computed.contain() == Style::Contain::Paint);
 		const bool clip_always = (clip_computed.clip() == Clip::Type::Always);
 		const bool clip_none = (clip_computed.clip() == Clip::Type::None);
 		const int clip_number = clip_computed.clip().GetNumber();
@@ -158,8 +159,10 @@ bool ElementUtilities::GetClippingRegion(Element* element, Rectanglei& out_clip_
 					clip_computed.border_bottom_right_radius() > 0.f || clip_computed.border_bottom_left_radius() > 0.f);
 
 				// If the element has border-radius we always use a clip mask, since we can't easily predict if content is located on the curved
-				// region to be clipped. If the element has a transform we only use a clip mask when the content clips.
-				if (has_border_radius || (transform && has_clipping_content))
+				// region to be clipped. Paint containment is an exception, as it's commonly used on many rounded elements whose content fits,
+				// so it only masks overflowing content. If the element has a transform we only use a clip mask when the content clips.
+				const bool border_radius_mask = (has_border_radius && (overflow_clip || clip_always || has_clipping_content));
+				if (border_radius_mask || (transform && has_clipping_content))
 				{
 					Geometry* clip_geometry = clipping_element->GetElementBackgroundBorder()->GetClipGeometry(clipping_element, clip_area);
 					const ClipMaskOperation clip_operation = (out_clip_mask_list->empty() ? ClipMaskOperation::Set : ClipMaskOperation::Intersect);
