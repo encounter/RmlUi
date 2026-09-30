@@ -3,8 +3,6 @@
 # CMake version is greater or equal than CMake 3.13
 target_sources(rmlui_core PRIVATE
 	"${CMAKE_CURRENT_SOURCE_DIR}/../FontEngineDefault/FontTypes.h"
-	"${CMAKE_CURRENT_SOURCE_DIR}/../FontEngineDefault/FreeTypeInterface.cpp"
-	"${CMAKE_CURRENT_SOURCE_DIR}/../FontEngineDefault/FreeTypeInterface.h"
 	"${CMAKE_CURRENT_SOURCE_DIR}/FontEngineInterfaceHarfBuzz.cpp"
 	"${CMAKE_CURRENT_SOURCE_DIR}/FontEngineInterfaceHarfBuzz.h"
 	"${CMAKE_CURRENT_SOURCE_DIR}/FontFace.cpp"
@@ -18,9 +16,18 @@ target_sources(rmlui_core PRIVATE
 	"${CMAKE_CURRENT_SOURCE_DIR}/FontGlyph.h"
 	"${CMAKE_CURRENT_SOURCE_DIR}/FontProvider.cpp"
 	"${CMAKE_CURRENT_SOURCE_DIR}/FontProvider.h"
-	"${CMAKE_CURRENT_SOURCE_DIR}/FreeTypeInterface.cpp"
-	"${CMAKE_CURRENT_SOURCE_DIR}/FreeTypeInterface.h"
 	"${CMAKE_CURRENT_SOURCE_DIR}/LanguageData.h"
+	"${CMAKE_CURRENT_SOURCE_DIR}/Rasterizer.h"
 )
+
+if(RMLUI_HARFBUZZ_RASTER)
+	target_sources(rmlui_core PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/RasterizerHarfBuzz.cpp")
+else()
+	target_sources(rmlui_core PRIVATE
+		"${CMAKE_CURRENT_SOURCE_DIR}/../FontEngineDefault/FreeTypeInterface.cpp"
+		"${CMAKE_CURRENT_SOURCE_DIR}/../FontEngineDefault/FreeTypeInterface.h"
+		"${CMAKE_CURRENT_SOURCE_DIR}/RasterizerFreeType.cpp"
+	)
+endif()
 
 target_compile_definitions(rmlui_core PRIVATE "RMLUI_FONT_ENGINE_HARFBUZZ")

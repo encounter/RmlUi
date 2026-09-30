@@ -402,10 +402,15 @@ if(RMLUI_FONT_ENGINE STREQUAL "freetype")
 	# From CMake 3.13 the next line can be moved into `FontEngineDefault/CMakeLists.txt`, see CMP0079.
 	target_link_libraries(rmlui_core PRIVATE Freetype::Freetype)
 elseif(RMLUI_FONT_ENGINE STREQUAL "harfbuzz")
-	# Include the source files for the HarfBuzz font engine, which shares face loading with the default font engine.
+	# Include the source files for the HarfBuzz font engine, which shares face loading with the default font engine unless it rasterizes
+	# with HarfBuzz.
 	add_subdirectory("FontEngineHarfBuzz")
 
-	target_link_libraries(rmlui_core PRIVATE Freetype::Freetype harfbuzz::harfbuzz)
+	if(RMLUI_HARFBUZZ_RASTER)
+		target_link_libraries(rmlui_core PRIVATE harfbuzz::raster harfbuzz::harfbuzz)
+	else()
+		target_link_libraries(rmlui_core PRIVATE Freetype::Freetype harfbuzz::harfbuzz)
+	endif()
 endif()
 
 if(RMLUI_LOTTIE_PLUGIN)

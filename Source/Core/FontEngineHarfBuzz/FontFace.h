@@ -11,12 +11,12 @@ namespace HarfBuzz {
 	class FontFaceHandleHarfBuzz;
 
 	/**
-	    A single font face, holding its FreeType face for rasterization and its HarfBuzz face for shaping.
+	    A single font face, holding its rasterizer face and its HarfBuzz face for shaping.
 	 */
 	class FontFace {
 	public:
-		/// @param[in] face The FreeType face.
-		/// @param[in] data The font data backing the FreeType face, must outlive this object.
+		/// @param[in] face The rasterizer face.
+		/// @param[in] data The font data backing the face, must outlive this object.
 		FontFace(FontFaceHandleFreetype face, Span<const byte> data, Style::FontStyle style, Style::FontWeight weight);
 		~FontFace();
 

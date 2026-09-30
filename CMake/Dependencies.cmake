@@ -6,7 +6,7 @@
 	*_NOTFOUND variables, we check directly for the existence of the target.
 ]]
 
-if(RMLUI_FONT_ENGINE STREQUAL "freetype" OR RMLUI_FONT_ENGINE STREQUAL "harfbuzz")
+if(RMLUI_FONT_ENGINE STREQUAL "freetype" OR (RMLUI_FONT_ENGINE STREQUAL "harfbuzz" AND NOT RMLUI_HARFBUZZ_RASTER))
 	find_package("Freetype")
 
 	if(FREETYPE_VERSION_STRING)
@@ -21,6 +21,24 @@ endif()
 if(RMLUI_FONT_ENGINE STREQUAL "harfbuzz")
 	find_package("HarfBuzz")
 	report_dependency_found_or_error("HarfBuzz" "HarfBuzz" harfbuzz::harfbuzz "HarfBuzz text shaping enabled")
+
+	if(RMLUI_HARFBUZZ_RASTER)
+		# HarfBuzz config files don't provide a target for the raster library, so look for it next to the main library.
+		if(NOT TARGET harfbuzz::raster AND TARGET harfbuzz::harfbuzz)
+			get_target_property(harfbuzz_location harfbuzz::harfbuzz LOCATION)
+			if(harfbuzz_location)
+				get_filename_component(harfbuzz_library_dir "${harfbuzz_location}" DIRECTORY)
+			endif()
+			find_library(HARFBUZZ_RASTER_LIBRARY NAMES harfbuzz-raster HINTS ${harfbuzz_library_dir} ${HARFBUZZ_LIB_DIRS})
+			if(HARFBUZZ_RASTER_LIBRARY)
+				add_library(harfbuzz::raster INTERFACE IMPORTED)
+				set_target_properties(harfbuzz::raster PROPERTIES INTERFACE_LINK_LIBRARIES "${HARFBUZZ_RASTER_LIBRARY};harfbuzz::harfbuzz")
+			endif()
+			unset(harfbuzz_location)
+			unset(harfbuzz_library_dir)
+		endif()
+		report_dependency_found_or_error("HarfBuzz raster" "harfbuzz-raster" harfbuzz::raster "HarfBuzz rasterizer enabled")
+	endif()
 endif()
 
 if(RMLUI_LOTTIE_PLUGIN)

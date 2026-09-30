@@ -27,8 +27,8 @@ namespace HarfBuzz {
 		FontFaceHandleHarfBuzz* GetFaceHandle(Style::FontStyle style, Style::FontWeight weight, int size);
 
 		/// Adds a new face to the family.
-		/// @param[in] ft_face The previously loaded FreeType face.
-		/// @param[in] data The font data backing the FreeType face.
+		/// @param[in] ft_face The previously loaded rasterizer face.
+		/// @param[in] data The font data backing the face.
 		/// @param[in] style The style of the new face.
 		/// @param[in] weight The weight of the new face.
 		/// @param[in] face_memory Optionally pass ownership of the face's memory to the face itself, automatically releasing it on destruction.

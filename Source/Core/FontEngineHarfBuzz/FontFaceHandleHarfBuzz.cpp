@@ -5,9 +5,7 @@
 #include "../../../Include/RmlUi/Core/StringUtilities.h"
 #include "FontFaceLayer.h"
 #include "FontProvider.h"
-#include "FreeTypeInterface.h"
-#include <ft2build.h>
-#include FT_FREETYPE_H
+#include "Rasterizer.h"
 #include <algorithm>
 #include <hb.h>
 #include <numeric>
@@ -62,7 +60,7 @@ namespace HarfBuzz {
 	{
 		base_layer = nullptr;
 		metrics = {};
-		ft_face = 0;
+		raster_face = 0;
 		hb_font = nullptr;
 		shaping_buffer = nullptr;
 	}
@@ -76,14 +74,11 @@ namespace HarfBuzz {
 		layers.clear();
 	}
 
-	bool FontFaceHandleHarfBuzz::Initialize(FontFaceHandleFreetype face, hb_face_t* hb_face, int font_size, bool load_default_glyphs)
+	bool FontFaceHandleHarfBuzz::Initialize(Rasterizer::FaceHandle face, hb_face_t* hb_face, int font_size, bool load_default_glyphs)
 	{
-		ft_face = face;
+		raster_face = face;
 
 		RMLUI_ASSERTMSG(layer_configurations.empty(), "Initialize must only be called once.");
-
-		if (!FreeType::InitialiseFaceHandle(ft_face, font_size, glyphs, metrics, load_default_glyphs))
-			return false;
 
 		// Shape with HarfBuzz's own OpenType font functions, scaled so that positions are in 26.6 fixed-point pixels like FreeType's. The
 		// advances are unhinted.
@@ -93,10 +88,13 @@ namespace HarfBuzz {
 		hb_font_set_ppem(hb_font, (unsigned int)font_size, (unsigned int)font_size);
 		hb_font_set_ptem(hb_font, (float)font_size);
 
-		// Match the named instance of a variable font that FreeType loaded, if any.
-		const unsigned int named_instance_index = (unsigned int)(((FT_Face)ft_face)->face_index >> 16);
+		// Match the named instance of a variable font that the rasterizer loaded, if any.
+		const unsigned int named_instance_index = Rasterizer::GetNamedInstanceIndex(raster_face);
 		if (named_instance_index > 0)
 			hb_font_set_var_named_instance(hb_font, named_instance_index - 1);
+
+		if (!Rasterizer::InitialiseFaceHandle(raster_face, hb_font, font_size, glyphs, metrics, load_default_glyphs))
+			return false;
 
 		shaping_buffer = hb_buffer_create();
 		RMLUI_ASSERT(shaping_buffer != nullptr);
@@ -404,7 +402,7 @@ namespace HarfBuzz {
 
 	bool FontFaceHandleHarfBuzz::AppendGlyph(FontGlyphIndex glyph_index, Character character)
 	{
-		bool result = FreeType::AppendGlyph(ft_face, metrics.size, glyph_index, character, glyphs);
+		bool result = Rasterizer::AppendGlyph(raster_face, hb_font, metrics.size, glyph_index, character, glyphs);
 		return result;
 	}
 
@@ -417,8 +415,8 @@ namespace HarfBuzz {
 			if (!fallback_face || fallback_face == this)
 				continue;
 
-			const FontGlyphIndex character_index = FreeType::GetGlyphIndexFromCharacter(fallback_face->ft_face, character);
-			if (character_index == 0)
+			hb_codepoint_t character_index = 0;
+			if (!hb_font_get_nominal_glyph(fallback_face->hb_font, (hb_codepoint_t)character, &character_index) || character_index == 0)
 				continue;
 
 			const FontGlyph* glyph = fallback_face->GetOrAppendGlyph(character_index, character, false);

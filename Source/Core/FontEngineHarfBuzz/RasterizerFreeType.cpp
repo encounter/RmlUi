@@ -1,16 +1,18 @@
-#include "FreeTypeInterface.h"
 #include "../../../Include/RmlUi/Core/Log.h"
 #include "../../../Include/RmlUi/Core/Math.h"
+#include "../FontEngineDefault/FreeTypeInterface.h"
+#include "Rasterizer.h"
 #include <ft2build.h>
 #include <limits.h>
 #include <string.h>
 #include FT_FREETYPE_H
 #include FT_MULTIPLE_MASTERS_H
 #include FT_TRUETYPE_TABLES_H
+#include <hb.h>
 
 namespace Rml {
 namespace HarfBuzz {
-	namespace FreeType {
+	namespace Rasterizer {
 		static bool BuildGlyph(FT_Face ft_face, const FontGlyphIndex glyph_index, Character character, FontGlyphMap& glyphs,
 			const float bitmap_scaling_factor);
 		static void BuildGlyphMap(FT_Face ft_face, int size, FontGlyphMap& glyphs, const float bitmap_scaling_factor, const bool load_default_glyphs);
@@ -35,7 +37,54 @@ namespace HarfBuzz {
 		}
 #endif
 
-		bool InitialiseFaceHandle(FontFaceHandleFreetype face, int font_size, FontGlyphMap& glyphs, FontMetrics& metrics, bool load_default_glyphs)
+		bool Initialise()
+		{
+			return Rml::FreeType::Initialise();
+		}
+
+		void Shutdown()
+		{
+			Rml::FreeType::Shutdown();
+		}
+
+		bool GetFaceVariations(Span<const byte> data, Vector<FaceVariation>& out_face_variations, int face_index)
+		{
+			return Rml::FreeType::GetFaceVariations(data, out_face_variations, face_index);
+		}
+
+		FaceHandle LoadFace(Span<const byte> data, const String& source, int face_index, int named_instance_index)
+		{
+			return Rml::FreeType::LoadFace(data, source, face_index, named_instance_index);
+		}
+
+		void ReleaseFace(FaceHandle face)
+		{
+			Rml::FreeType::ReleaseFace(face);
+		}
+
+		void GetFaceStyle(FaceHandle face, String* font_family, Style::FontStyle* style, Style::FontWeight* weight)
+		{
+			Rml::FreeType::GetFaceStyle(face, font_family, style, weight);
+		}
+
+		hb_face_t* CreateShapingFace(FaceHandle face, Span<const byte> data)
+		{
+			// The low 16 bits of the FreeType face index select the face within a collection, the high bits select a named instance of a
+			// variable font, which is applied to each sized font instead.
+			hb_blob_t* blob = hb_blob_create(reinterpret_cast<const char*>(data.data()), static_cast<unsigned int>(data.size()),
+				HB_MEMORY_MODE_READONLY, nullptr, nullptr);
+			hb_face_t* hb_face = hb_face_create(blob, static_cast<unsigned int>(((FT_Face)face)->face_index & 0xFFFF));
+			hb_blob_destroy(blob);
+			return hb_face;
+		}
+
+		unsigned int GetNamedInstanceIndex(FaceHandle face)
+		{
+			return static_cast<unsigned int>(((FT_Face)face)->face_index >> 16);
+		}
+
+		bool InitialiseFaceHandle(FaceHandle face, hb_font_t* /*font*/, int font_size, FontGlyphMap& glyphs, FontMetrics& metrics,
+			bool load_default_glyphs)
 		{
 			FT_Face ft_face = (FT_Face)face;
 
@@ -54,7 +103,7 @@ namespace HarfBuzz {
 			return true;
 		}
 
-		bool AppendGlyph(FontFaceHandleFreetype face, int font_size, FontGlyphIndex glyph_index, Character character, FontGlyphMap& glyphs)
+		bool AppendGlyph(FaceHandle face, hb_font_t* /*font*/, int font_size, FontGlyphIndex glyph_index, Character character, FontGlyphMap& glyphs)
 		{
 			FT_Face ft_face = (FT_Face)face;
 
@@ -70,11 +119,6 @@ namespace HarfBuzz {
 				return false;
 
 			return true;
-		}
-
-		FontGlyphIndex GetGlyphIndexFromCharacter(FontFaceHandleFreetype face, Character character)
-		{
-			return FT_Get_Char_Index((FT_Face)face, (FT_ULong)character);
 		}
 
 		static bool BuildGlyph(FT_Face ft_face, const FontGlyphIndex glyph_index, Character character, FontGlyphMap& glyphs,
@@ -411,6 +455,6 @@ namespace HarfBuzz {
 				}
 			}
 		}
-	} // namespace FreeType
+	} // namespace Rasterizer
 } // namespace HarfBuzz
 } // namespace Rml

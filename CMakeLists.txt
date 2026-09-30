@@ -68,6 +68,7 @@ option(RMLUI_LOTTIE_PLUGIN "Enable plugin for Lottie animations. Requires the rl
 option(RMLUI_SVG_PLUGIN "Enable plugin for SVG images. Requires the lunasvg library." OFF)
 
 option(RMLUI_HARFBUZZ_SAMPLE "Enable harfbuzz text shaping sample. Requires the harfbuzz library." OFF)
+option(RMLUI_HARFBUZZ_RASTER "Rasterize glyphs with HarfBuzz instead of FreeType in the HarfBuzz font engine, so that it doesn't need FreeType. Glyphs are not hinted. Requires the harfbuzz-raster library." OFF)
 
 option(RMLUI_THIRDPARTY_CONTAINERS "Enable integrated third-party containers for improved performance, rather than their standard library counterparts." ON)
 

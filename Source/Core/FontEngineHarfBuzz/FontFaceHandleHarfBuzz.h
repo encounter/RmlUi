@@ -9,6 +9,7 @@
 #include "FontFaceLayer.h"
 #include "FontGlyph.h"
 #include "LanguageData.h"
+#include "Rasterizer.h"
 
 struct hb_buffer_t;
 struct hb_face_t;
@@ -20,16 +21,16 @@ namespace Rml {
 namespace HarfBuzz {
 
 	/**
-	    A font face at a given size, shaping text through HarfBuzz and rasterizing glyphs through FreeType.
+	    A font face at a given size, shaping text through HarfBuzz and rasterizing glyphs through the rasterizer.
 	 */
 	class FontFaceHandleHarfBuzz : public NonCopyMoveable {
 	public:
 		FontFaceHandleHarfBuzz();
 		~FontFaceHandleHarfBuzz();
 
-		/// @param[in] face The FreeType face used to rasterize glyphs.
+		/// @param[in] face The rasterizer face used to rasterize glyphs.
 		/// @param[in] hb_face The HarfBuzz face used to shape text, shared with the handles of the other sizes of this face.
-		bool Initialize(FontFaceHandleFreetype face, hb_face_t* hb_face, int font_size, bool load_default_glyphs);
+		bool Initialize(Rasterizer::FaceHandle face, hb_face_t* hb_face, int font_size, bool load_default_glyphs);
 
 		const FontMetrics& GetFontMetrics() const;
 
@@ -182,7 +183,7 @@ namespace HarfBuzz {
 
 		FontMetrics metrics;
 
-		FontFaceHandleFreetype ft_face;
+		Rasterizer::FaceHandle raster_face;
 		hb_font_t* hb_font;
 
 		// Reused between calls to avoid allocating for every string.

@@ -1,9 +1,7 @@
 #include "FontFace.h"
 #include "../../../Include/RmlUi/Core/Log.h"
-#include "../FontEngineDefault/FreeTypeInterface.h"
 #include "FontFaceHandleHarfBuzz.h"
-#include <ft2build.h>
-#include FT_FREETYPE_H
+#include "Rasterizer.h"
 #include <hb.h>
 
 namespace Rml {
@@ -15,22 +13,17 @@ namespace HarfBuzz {
 		weight = _weight;
 		face = _face;
 
-		// The low 16 bits of the FreeType face index select the face within a collection, the high bits select a named instance of a variable
-		// font. The named instance is applied to each sized font in its handle.
-		hb_blob_t* blob = hb_blob_create(reinterpret_cast<const char*>(data.data()), static_cast<unsigned int>(data.size()), HB_MEMORY_MODE_READONLY,
-			nullptr, nullptr);
-		hb_face = hb_face_create(blob, static_cast<unsigned int>(((FT_Face)face)->face_index & 0xFFFF));
-		hb_blob_destroy(blob);
+		hb_face = Rasterizer::CreateShapingFace(face, data);
 	}
 
 	FontFace::~FontFace()
 	{
-		// The handles reference both the HarfBuzz and FreeType faces, release them first.
+		// The handles reference both the HarfBuzz and rasterizer faces, release them first.
 		handles.clear();
 		hb_face_destroy(hb_face);
 
 		if (face)
-			Rml::FreeType::ReleaseFace(face);
+			Rasterizer::ReleaseFace(face);
 	}
 
 	Style::FontStyle FontFace::GetStyle() const

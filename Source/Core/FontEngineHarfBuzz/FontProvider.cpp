@@ -5,9 +5,9 @@
 #include "../../../Include/RmlUi/Core/Math.h"
 #include "../../../Include/RmlUi/Core/StringUtilities.h"
 #include "../ComputeProperty.h"
-#include "../FontEngineDefault/FreeTypeInterface.h"
 #include "FontFace.h"
 #include "FontFamily.h"
+#include "Rasterizer.h"
 #include <algorithm>
 
 namespace Rml {
@@ -28,7 +28,7 @@ namespace HarfBuzz {
 	bool FontProvider::Initialise()
 	{
 		RMLUI_ASSERT(!g_font_provider);
-		if (!Rml::FreeType::Initialise())
+		if (!Rasterizer::Initialise())
 			return false;
 		g_font_provider = new FontProvider;
 		return true;
@@ -39,7 +39,7 @@ namespace HarfBuzz {
 		RMLUI_ASSERT(g_font_provider);
 		delete g_font_provider;
 		g_font_provider = nullptr;
-		Rml::FreeType::Shutdown();
+		Rasterizer::Shutdown();
 	}
 
 	FontProvider& FontProvider::Get()
@@ -128,7 +128,7 @@ namespace HarfBuzz {
 		using Style::FontWeight;
 
 		Vector<FaceVariation> face_variations;
-		if (!Rml::FreeType::GetFaceVariations(data, face_variations, face_index))
+		if (!Rasterizer::GetFaceVariations(data, face_variations, face_index))
 		{
 			Log::Message(Log::LT_ERROR, "Failed to load font face from '%s': Invalid or unsupported font face file format.", source.c_str());
 			return false;
@@ -184,14 +184,14 @@ namespace HarfBuzz {
 
 		for (const FaceVariation& variation : load_variations)
 		{
-			FontFaceHandleFreetype ft_face = Rml::FreeType::LoadFace(data, source, face_index, variation.named_instance_index);
+			FontFaceHandleFreetype ft_face = Rasterizer::LoadFace(data, source, face_index, variation.named_instance_index);
 			if (!ft_face)
 				return false;
 
 			if (font_family.empty())
-				Rml::FreeType::GetFaceStyle(ft_face, &font_family, &style, nullptr);
+				Rasterizer::GetFaceStyle(ft_face, &font_family, &style, nullptr);
 			if (weight == FontWeight::Auto)
-				Rml::FreeType::GetFaceStyle(ft_face, nullptr, nullptr, &weight);
+				Rasterizer::GetFaceStyle(ft_face, nullptr, nullptr, &weight);
 
 			const FontWeight variation_weight = (variation.weight == FontWeight::Auto ? weight : variation.weight);
 			const String font_face_description = GetFontFaceDescription(font_family, style, variation_weight);
