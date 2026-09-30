@@ -32,7 +32,7 @@ if(NOT RMLUI_BACKEND IN_LIST RMLUI_BACKEND_OPTIONS)
 	message(FATAL_ERROR "The RmlUi backend '${RMLUI_BACKEND}' specified in RMLUI_BACKEND is not valid. Available options: ${RMLUI_BACKEND_OPTIONS}")
 endif()
 
-set(RMLUI_FONT_ENGINE "freetype" CACHE STRING "Font engine to build RmlUi with. If set to \"none\", RmlUi won't build with any of the included font engines and some samples might be disabled.")
+set(RMLUI_FONT_ENGINE "freetype" CACHE STRING "Font engine to build RmlUi with. If set to \"harfbuzz\", text is additionally shaped with HarfBuzz. If set to \"none\", RmlUi won't build with any of the included font engines and some samples might be disabled.")
 set_property(CACHE RMLUI_FONT_ENGINE PROPERTY STRINGS ${RMLUI_FONT_ENGINE_OPTIONS})
 if(NOT RMLUI_FONT_ENGINE IN_LIST RMLUI_FONT_ENGINE_OPTIONS)
 	message(FATAL_ERROR "The RmlUi font engine '${RMLUI_FONT_ENGINE}' specified in RMLUI_FONT_ENGINE is not valid. Available options: ${RMLUI_FONT_ENGINE_OPTIONS}")

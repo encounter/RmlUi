@@ -16,7 +16,7 @@ TextureLayout::TextureLayout() {}
 
 TextureLayout::~TextureLayout() {}
 
-void TextureLayout::AddRectangle(int id, Vector2i dimensions)
+void TextureLayout::AddRectangle(uint64_t id, Vector2i dimensions)
 {
 	rectangles.push_back(TextureLayoutRectangle(id, dimensions));
 }

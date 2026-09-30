@@ -29,6 +29,7 @@ set(RMLUI_BACKEND_OPTIONS
 set(RMLUI_FONT_ENGINE_OPTIONS
 	"none"
 	"freetype"
+	"harfbuzz"
 )
 
 set(RMLUI_LUA_BINDINGS_LIBRARY_OPTIONS

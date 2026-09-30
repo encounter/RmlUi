@@ -30,6 +30,10 @@
 	#include "FontEngineDefault/FontEngineInterfaceDefault.h"
 #endif
 
+#ifdef RMLUI_FONT_ENGINE_HARFBUZZ
+	#include "FontEngineHarfBuzz/FontEngineInterfaceHarfBuzz.h"
+#endif
+
 #ifdef RMLUI_LOTTIE_PLUGIN
 	#include "../Lottie/LottiePlugin.h"
 #endif
@@ -109,8 +113,11 @@ bool Initialise()
 
 	if (!font_interface)
 	{
-#ifdef RMLUI_FONT_ENGINE_FREETYPE
+#if defined(RMLUI_FONT_ENGINE_FREETYPE)
 		core_data->default_font_interface = MakeUnique<FontEngineInterfaceDefault>();
+		font_interface = core_data->default_font_interface.get();
+#elif defined(RMLUI_FONT_ENGINE_HARFBUZZ)
+		core_data->default_font_interface = MakeUnique<FontEngineInterfaceHarfBuzz>();
 		font_interface = core_data->default_font_interface.get();
 #else
 		Log::Message(Log::LT_ERROR, "No font engine interface set!");

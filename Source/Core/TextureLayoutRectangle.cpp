@@ -2,7 +2,7 @@
 
 namespace Rml {
 
-TextureLayoutRectangle::TextureLayoutRectangle(const int _id, const Vector2i dimensions) : dimensions(dimensions), texture_position(0, 0)
+TextureLayoutRectangle::TextureLayoutRectangle(const uint64_t _id, const Vector2i dimensions) : dimensions(dimensions), texture_position(0, 0)
 {
 	id = _id;
 	texture_index = -1;
@@ -13,7 +13,7 @@ TextureLayoutRectangle::TextureLayoutRectangle(const int _id, const Vector2i dim
 
 TextureLayoutRectangle::~TextureLayoutRectangle() {}
 
-int TextureLayoutRectangle::GetId() const
+uint64_t TextureLayoutRectangle::GetId() const
 {
 	return id;
 }

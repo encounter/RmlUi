@@ -10,12 +10,12 @@ namespace Rml {
 
 class TextureLayoutRectangle {
 public:
-	TextureLayoutRectangle(int id, Vector2i dimensions);
+	TextureLayoutRectangle(uint64_t id, Vector2i dimensions);
 	~TextureLayoutRectangle();
 
 	/// Returns the rectangle's id.
 	/// @return The rectangle's id.
-	int GetId() const;
+	uint64_t GetId() const;
 	/// Returns the rectangle's position; this is only valid if it has been placed.
 	/// @return The rectangle's position within its texture.
 	Vector2i GetPosition() const;
@@ -49,7 +49,7 @@ public:
 	int GetTextureStride() const;
 
 private:
-	int id;
+	uint64_t id;
 	Vector2i dimensions;
 
 	int texture_index;

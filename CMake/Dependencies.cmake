@@ -6,7 +6,7 @@
 	*_NOTFOUND variables, we check directly for the existence of the target.
 ]]
 
-if(RMLUI_FONT_ENGINE STREQUAL "freetype")
+if(RMLUI_FONT_ENGINE STREQUAL "freetype" OR RMLUI_FONT_ENGINE STREQUAL "harfbuzz")
 	find_package("Freetype")
 
 	if(FREETYPE_VERSION_STRING)
@@ -16,6 +16,11 @@ if(RMLUI_FONT_ENGINE STREQUAL "freetype")
 	endif()
 
 	report_dependency_found_or_error("Freetype" "Freetype" Freetype::Freetype "Freetype font engine enabled")
+endif()
+
+if(RMLUI_FONT_ENGINE STREQUAL "harfbuzz")
+	find_package("HarfBuzz")
+	report_dependency_found_or_error("HarfBuzz" "HarfBuzz" harfbuzz::harfbuzz "HarfBuzz text shaping enabled")
 endif()
 
 if(RMLUI_LOTTIE_PLUGIN)
