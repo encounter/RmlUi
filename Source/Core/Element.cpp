@@ -1994,6 +1994,9 @@ void Element::OnPropertyChange(const PropertyIdSet& changed_properties)
 		meta->background_border.DirtyBackground();
 	}
 
+	if (changed_properties.Contains(PropertyId::BoxShadow))
+		meta->background_border.DirtyBoxShadowExtents();
+
 	// Dirty the border if it's changed.
 	if (border_radius_changed ||                                      //
 		changed_properties.Contains(PropertyId::BorderTopWidth) ||    //

@@ -4,10 +4,13 @@
 #include "../../Include/RmlUi/Core/Context.h"
 #include "../../Include/RmlUi/Core/DecorationTypes.h"
 #include "../../Include/RmlUi/Core/Element.h"
+#include "../../Include/RmlUi/Core/ElementDocument.h"
 #include "../../Include/RmlUi/Core/MeshUtilities.h"
 #include "../../Include/RmlUi/Core/Profiling.h"
+#include "../../Include/RmlUi/Core/Property.h"
 #include "../../Include/RmlUi/Core/RenderManager.h"
 #include "BoxShadowCache.h"
+#include "ElementStyle.h"
 #include "GeometryBoxShadow.h"
 
 namespace Rml {
@@ -47,9 +50,61 @@ void ElementBackgroundBorder::DirtyBackground()
 	background_dirty = true;
 }
 
+void ElementBackgroundBorder::DirtyBoxShadowExtents()
+{
+	box_shadow_extents_dirty = true;
+}
+
 void ElementBackgroundBorder::DirtyBorder()
 {
 	border_dirty = true;
+}
+
+void ElementBackgroundBorder::GetBoxShadowExtents(Element* element, Vector2f& out_top_left, Vector2f& out_bottom_right)
+{
+	// The shadow lengths may be relative to any of these.
+	LengthContext length_context;
+	length_context.font_size = element->GetComputedValues().font_size();
+	if (ElementDocument* document = element->GetOwnerDocument())
+		length_context.document_font_size = document->GetComputedValues().font_size();
+	if (Context* context = element->GetContext())
+	{
+		length_context.dp_ratio = context->GetDensityIndependentPixelRatio();
+		length_context.viewport = context->GetDimensions();
+	}
+
+	if (box_shadow_extents_dirty || length_context != box_shadow_length_context)
+	{
+		box_shadow_extents_dirty = false;
+		box_shadow_length_context = length_context;
+		box_shadow_extent_top_left = {};
+		box_shadow_extent_bottom_right = {};
+
+		const Property* p_box_shadow = nullptr;
+		if (element->GetComputedValues().has_box_shadow())
+			p_box_shadow = element->GetStyle()->GetLocalPropertyWithResolvedVariables(PropertyId::BoxShadow);
+
+		if (p_box_shadow)
+		{
+			RMLUI_ASSERT(p_box_shadow->value.GetType() == Variant::BOXSHADOWLIST);
+			const BoxShadowList& shadow_list = p_box_shadow->value.GetReference<BoxShadowList>();
+
+			for (const BoxShadow& shadow : shadow_list)
+			{
+				if (!shadow.inset)
+				{
+					const float extent = 1.5f * element->ResolveLength(shadow.blur_radius) + element->ResolveLength(shadow.spread_distance);
+					const Vector2f offset = {element->ResolveLength(shadow.offset_x), element->ResolveLength(shadow.offset_y)};
+
+					box_shadow_extent_top_left = Math::Max(box_shadow_extent_top_left, -offset + Vector2f(extent));
+					box_shadow_extent_bottom_right = Math::Max(box_shadow_extent_bottom_right, offset + Vector2f(extent));
+				}
+			}
+		}
+	}
+
+	out_top_left = box_shadow_extent_top_left;
+	out_bottom_right = box_shadow_extent_bottom_right;
 }
 
 Geometry* ElementBackgroundBorder::GetClipGeometry(Element* element, BoxArea clip_area)

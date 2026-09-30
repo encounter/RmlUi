@@ -289,24 +289,7 @@ bool ElementUtilities::GetBoundingBox(Rectanglef& out_rectangle, Element* elemen
 		// 'Auto' acts like border box extended to encompass any ink overflow, including the element's box-shadow.
 		// Note: Does not currently include ink overflow due to filters, as that is handled manually in ElementEffects.
 		box_area = BoxArea::Border;
-
-		if (const Property* p_box_shadow = element->GetStyle()->GetLocalPropertyWithResolvedVariables(PropertyId::BoxShadow))
-		{
-			RMLUI_ASSERT(p_box_shadow->value.GetType() == Variant::BOXSHADOWLIST);
-			const BoxShadowList& shadow_list = p_box_shadow->value.GetReference<BoxShadowList>();
-
-			for (const BoxShadow& shadow : shadow_list)
-			{
-				if (!shadow.inset)
-				{
-					const float extent = 1.5f * element->ResolveLength(shadow.blur_radius) + element->ResolveLength(shadow.spread_distance);
-					const Vector2f offset = {element->ResolveLength(shadow.offset_x), element->ResolveLength(shadow.offset_y)};
-
-					shadow_extent_top_left = Math::Max(shadow_extent_top_left, -offset + Vector2f(extent));
-					shadow_extent_bottom_right = Math::Max(shadow_extent_bottom_right, offset + Vector2f(extent));
-				}
-			}
-		}
+		element->GetElementBackgroundBorder()->GetBoxShadowExtents(element, shadow_extent_top_left, shadow_extent_bottom_right);
 	}
 
 	// Element bounds in non-transformed space.
