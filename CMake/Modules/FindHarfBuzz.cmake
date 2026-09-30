@@ -10,6 +10,13 @@
 # In addition, the following IMPORTED target is created:
 #   harfbuzz::harfbuzz
 
+# Use the target if the consuming project already provides it. Some HarfBuzz config files don't check for an existing
+# target before creating theirs.
+if(TARGET harfbuzz::harfbuzz)
+	set(HARFBUZZ_LIBRARY "harfbuzz::harfbuzz")
+	return()
+endif()
+
 # Look for the library in config mode first.
 find_package(harfbuzz CONFIG QUIET)
 if(TARGET harfbuzz::harfbuzz)
