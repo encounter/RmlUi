@@ -22,6 +22,7 @@ namespace HarfBuzz {
 		};
 
 		static hb_raster_draw_t* raster_draw = nullptr;
+		static constexpr int outline_supersampling = 4;
 		static hb_raster_paint_t* raster_paint = nullptr;
 
 		static Face* GetFace(FaceHandle face)
@@ -73,8 +74,9 @@ namespace HarfBuzz {
 				return false;
 			}
 
-			// Fonts are scaled to 26.6 fixed-point pixels, rasterize them at pixel size.
-			hb_raster_draw_set_scale_factor(raster_draw, 64.f, 64.f);
+			// Fonts are scaled to 26.6 fixed-point pixels. Outlines are rasterized at four times the pixel size and then downsampled, see
+			// DownsampleImage(), color glyphs are painted at pixel size.
+			hb_raster_draw_set_scale_factor(raster_draw, 64.f / float(outline_supersampling), 64.f / float(outline_supersampling));
 			hb_raster_paint_set_scale_factor(raster_paint, 64.f, 64.f);
 			// Like FreeType, paint the foreground color of color glyphs in opaque black.
 			hb_raster_paint_set_foreground(raster_paint, HB_COLOR(0, 0, 0, 255));
@@ -314,6 +316,47 @@ namespace HarfBuzz {
 			}
 		}
 
+		// Box-filters an outline image rasterized at 'outline_supersampling' times the pixel size into the glyph. The HarfBuzz rasterizer
+		// accumulates the coverage of each contour, which is wrong where contours overlap, as they do in many fonts built from variable
+		// fonts. Like FreeType does for glyphs flagged as overlapping, rasterizing at a higher resolution makes the coverage nearly binary
+		// at each sample, so that overlaps resolve correctly. Every glyph is supersampled, since fonts don't always flag their overlaps.
+		static void DownsampleImage(hb_raster_image_t* image, FontGlyph& glyph)
+		{
+			hb_raster_extents_t extents = {};
+			hb_raster_image_get_extents(image, &extents);
+			const uint8_t* source = hb_raster_image_get_buffer(image);
+			if (!source || extents.width == 0 || extents.height == 0)
+				return;
+
+			constexpr int n = outline_supersampling;
+			auto FloorDiv = [](int value) { return value >= 0 ? value / n : -((-value + n - 1) / n); };
+			const int x0 = FloorDiv(extents.x_origin);
+			const int y0 = FloorDiv(extents.y_origin);
+			const int x1 = FloorDiv(extents.x_origin + (int)extents.width + n - 1);
+			const int y1 = FloorDiv(extents.y_origin + (int)extents.height + n - 1);
+			const int width = x1 - x0;
+			const int height = y1 - y0;
+
+			Vector<uint16_t> accumulator(size_t(width * height), 0);
+			for (int row = 0; row < (int)extents.height; row++)
+			{
+				// Source rows go upwards from the bottom edge, while glyph rows go downwards from the top edge.
+				const int destination_row = (y1 - 1) - FloorDiv(extents.y_origin + row);
+				const uint8_t* source_row = source + row * extents.stride;
+				uint16_t* destination = accumulator.data() + destination_row * width;
+				for (int column = 0; column < (int)extents.width; column++)
+					destination[FloorDiv(extents.x_origin + column) - x0] += source_row[column];
+			}
+
+			glyph.color_format = ColorFormat::A8;
+			glyph.bitmap_dimensions = Vector2i(width, height);
+			glyph.bearing = Vector2i(x0, y1);
+			glyph.bitmap_owned_data.reset(new byte[width * height]);
+			glyph.bitmap_data = glyph.bitmap_owned_data.get();
+			for (size_t i = 0; i < accumulator.size(); i++)
+				glyph.bitmap_owned_data[i] = byte((accumulator[i] + (n * n) / 2) / (n * n));
+		}
+
 		static bool BuildGlyph(const Face& face, hb_font_t* font, FontGlyphIndex glyph_index, Character character, FontGlyphMap& glyphs)
 		{
 			if (glyph_index == 0)
@@ -329,33 +372,32 @@ namespace HarfBuzz {
 			FontGlyph& glyph = result.first->second.bitmap;
 			glyph.advance = (hb_font_get_glyph_h_advance(font, glyph_index) + 32) >> 6;
 
-			// Glyphs without extents, such as spaces, have no bitmap.
-			hb_glyph_extents_t glyph_extents = {};
-			if (!hb_font_get_glyph_extents(font, glyph_index, &glyph_extents))
-				return true;
-
-			hb_raster_image_t* image = nullptr;
 			if (IsColorGlyph(face.face, font, glyph_index))
 			{
-				if (hb_raster_paint_set_glyph_extents(raster_paint, &glyph_extents) && hb_raster_paint_glyph_or_fail(raster_paint, font, glyph_index))
+				// Color glyphs need their extents set, which rounds them slightly inwards. At 26.6 fixed-point scale, this clips at most a few
+				// levels of coverage.
+				hb_raster_image_t* image = nullptr;
+				hb_glyph_extents_t glyph_extents = {};
+				if (hb_font_get_glyph_extents(font, glyph_index, &glyph_extents) && hb_raster_paint_set_glyph_extents(raster_paint, &glyph_extents) &&
+					hb_raster_paint_glyph_or_fail(raster_paint, font, glyph_index))
 					image = hb_raster_paint_render(raster_paint);
 				hb_raster_paint_clear(raster_paint);
-			}
 
-			if (!image)
-			{
-				if (hb_raster_draw_set_glyph_extents(raster_draw, &glyph_extents))
+				if (image)
 				{
-					hb_raster_draw_glyph(raster_draw, font, glyph_index);
-					image = hb_raster_draw_render(raster_draw);
+					CopyImage(image, glyph);
+					hb_raster_image_destroy(image);
+					return true;
 				}
-				hb_raster_draw_clear(raster_draw);
 			}
 
-			if (image)
+			// Outlines use the extents computed from the flattened outline, which are exact. Glyphs without outlines, such as spaces, render
+			// an empty image.
+			hb_raster_draw_glyph(raster_draw, font, glyph_index);
+			if (hb_raster_image_t* image = hb_raster_draw_render(raster_draw))
 			{
-				CopyImage(image, glyph);
-				hb_raster_image_destroy(image);
+				DownsampleImage(image, glyph);
+				hb_raster_draw_recycle_image(raster_draw, image);
 			}
 
 			return true;
@@ -436,11 +478,10 @@ namespace HarfBuzz {
 			descender += hb_ot_metrics_get_variation(font, HB_OT_METRICS_TAG_HORIZONTAL_DESCENDER);
 			line_gap += hb_ot_metrics_get_variation(font, HB_OT_METRICS_TAG_HORIZONTAL_LINE_GAP);
 
-			// Round to whole pixels like FreeType's scaled size metrics. TrueType fonts that ask for integer ppem sizes round all three.
+			// Round to whole pixels like FreeType's scaled size metrics.
 			const float height = ascender - descender + line_gap;
-			const bool round_all = (head.U16(16) & 8) != 0;
-			metrics.ascent = round_all ? Math::Round(ascender * scale) : Math::RoundUp(ascender * scale);
-			metrics.descent = -(round_all ? Math::Round(descender * scale) : Math::RoundDown(descender * scale));
+			metrics.ascent = Math::RoundUp(ascender * scale);
+			metrics.descent = -Math::RoundDown(descender * scale);
 			metrics.line_spacing = Math::Round(height * scale);
 
 			// Like FreeType, the underline position is centered on its thickness.
@@ -453,7 +494,8 @@ namespace HarfBuzz {
 			hb_codepoint_t x_index = 0;
 			hb_glyph_extents_t x_extents = {};
 			if (hb_font_get_nominal_glyph(font, 'x', &x_index) && hb_font_get_glyph_extents(font, x_index, &x_extents))
-				metrics.x_height = -x_extents.height / 64.f;
+				// Rounded like the height of the hinted glyph that FreeType measures.
+				metrics.x_height = Math::Round(-x_extents.height / 64.f);
 			else
 				metrics.x_height = 0.5f * metrics.line_spacing;
 
