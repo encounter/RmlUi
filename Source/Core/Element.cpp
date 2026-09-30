@@ -3024,6 +3024,11 @@ void Element::UpdateTransformState()
 			}
 		}
 
+		// An identity transform has no visual effect, such as one resting at the end of a transition. Dropping it keeps scissor clipping
+		// available to this element and its descendants.
+		if (have_transform && transform == Matrix4f::Identity())
+			have_transform = false;
+
 		if (have_transform)
 		{
 			if (!transform_state)
