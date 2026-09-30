@@ -12,6 +12,7 @@
 #include "../../Include/RmlUi/Core/PropertiesIteratorView.h"
 #include "../../Include/RmlUi/Core/PropertyDefinition.h"
 #include "../../Include/RmlUi/Core/PropertyIdSet.h"
+#include "../../Include/RmlUi/Core/RenderManager.h"
 #include "../../Include/RmlUi/Core/StyleSheet.h"
 #include "../../Include/RmlUi/Core/StyleSheetSpecification.h"
 #include "../../Include/RmlUi/Core/TransformPrimitive.h"
@@ -65,6 +66,21 @@ static float GetScrollOffsetDelta(ScrollAlignment alignment, float begin_offset,
 		return (begin_offset + end_offset) / 2.0f;
 	}
 	return 0.f;
+}
+
+// Returns true if the given bounds in window coordinates lie outside the element's clipping region.
+static bool IsOutsideClippingRegion(Element* element, Rectanglef bounds)
+{
+	Context* context = element->GetContext();
+	if (!context)
+		return false;
+
+	Rectanglef clip_bounds = Rectanglef::FromSize(Vector2f(context->GetRenderManager().GetViewport()));
+	Rectanglef element_clip_bounds;
+	if (ElementUtilities::GetClippingBounds(element, element_clip_bounds))
+		clip_bounds = clip_bounds.Intersect(element_clip_bounds);
+
+	return !clip_bounds.Intersects(bounds);
 }
 
 RMLUI_RTTI_Define(Element)
@@ -193,6 +209,15 @@ void Element::Render()
 	UpdateTransformState();
 	if (meta->effects.IsFilterOutputDiscarded())
 		return;
+
+	// Paint containment keeps all descendants within the element's border box, and they are rendered as part of its stacking context. So the
+	// whole subtree can be skipped when the element is outside its clipping region.
+	if (local_stacking_context && meta->computed_values.contain() == Style::Contain::Paint)
+	{
+		Rectanglef bounds;
+		if (ElementUtilities::GetBoundingBox(bounds, this, BoxArea::Auto) && IsOutsideClippingRegion(this, bounds))
+			return;
+	}
 
 	ElementUtilities::ApplyTransform(*this);
 

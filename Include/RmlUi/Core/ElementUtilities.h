@@ -65,6 +65,11 @@ public:
 	/// @return True if a clipping region exists for the element and clip_origin and clip_window were set, false if not.
 	static bool GetClippingRegion(Element* element, Rectanglei& clip_region, ClipMaskGeometryList* clip_mask_list = nullptr,
 		bool force_clip_self = false);
+	/// Finds bounds containing the clipping region for an element, including the clip areas of any transformed ancestors.
+	/// @param[in] element The element to find the clipping bounds for.
+	/// @param[out] out_bounds Bounds containing the element's clipping region in window coordinates, which may be larger than the region.
+	/// @return True if the element is clipped and out_bounds was set, false if not.
+	static bool GetClippingBounds(Element* element, Rectanglef& out_bounds);
 	/// Sets the clipping region from an element and its ancestors.
 	/// @param[in] element The element to generate the clipping region from.
 	/// @param[in] force_clip_self If true, also clips to the border area of the provided element regardless.

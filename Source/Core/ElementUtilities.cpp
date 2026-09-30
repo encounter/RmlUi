@@ -115,94 +115,118 @@ int ElementUtilities::GetStringWidth(Element* element, StringView string, Charac
 	return GetFontEngineInterface()->GetStringWidth(font_face_handle, string, text_shaping_context, prior_character);
 }
 
+namespace {
+	struct ClippingAncestor {
+		Element* element;
+		BoxArea clip_area;
+		bool has_clipping_content;
+		bool overflow_clip;
+		bool clip_always;
+	};
+
+	// Calls the function for each ancestor that clips the element, starting with the closest one. This includes the element itself
+	// when forced to clip itself.
+	template <typename Function>
+	void ForEachClippingAncestor(Element* element, bool force_clip_self, Function&& function)
+	{
+		using Style::Clip;
+		Clip target_element_clip = element->GetComputedValues().clip();
+		if (target_element_clip == Clip::Type::None && !force_clip_self)
+			return;
+
+		int num_ignored_clips = target_element_clip.GetNumber();
+
+		// Search through the element's ancestors, finding all elements that clip their overflow and have overflow to clip.
+		Element* clipping_element = (force_clip_self ? element : element->GetOffsetParent());
+
+		while (clipping_element)
+		{
+			const bool force_clip_current_element = (force_clip_self && clipping_element == element);
+			const ComputedValues& clip_computed = clipping_element->GetComputedValues();
+			const bool overflow_clip =
+				(clip_computed.overflow_x() != Style::Overflow::Visible || clip_computed.overflow_y() != Style::Overflow::Visible);
+			const bool clip_enabled = (overflow_clip || clip_computed.contain() == Style::Contain::Paint);
+			const bool clip_always = (clip_computed.clip() == Clip::Type::Always);
+			const bool clip_none = (clip_computed.clip() == Clip::Type::None);
+			const int clip_number = clip_computed.clip().GetNumber();
+
+			// Merge the existing clip region with the current clip region, unless we are ignoring clip regions.
+			if (((clip_always || clip_enabled) && num_ignored_clips == 0) || force_clip_current_element)
+			{
+				const BoxArea clip_area = (force_clip_current_element ? BoxArea::Border : clipping_element->GetClipArea());
+				const bool has_clipping_content =
+					(clip_always || force_clip_current_element || clipping_element->GetClientWidth() < clipping_element->GetScrollWidth() - 0.5f ||
+						clipping_element->GetClientHeight() < clipping_element->GetScrollHeight() - 0.5f);
+
+				function(ClippingAncestor{clipping_element, clip_area, has_clipping_content, overflow_clip, clip_always});
+			}
+
+			// If this region is meant to clip and we're skipping regions, update the counter.
+			if (num_ignored_clips > 0 && clip_enabled)
+				num_ignored_clips--;
+
+			// Inherit how many clip regions this ancestor ignores.
+			num_ignored_clips = Math::Max(num_ignored_clips, clip_number);
+
+			// If this region ignores all clipping regions, then we do too.
+			if (clip_none)
+				break;
+
+			// Climb the tree to this region's parent.
+			clipping_element = clipping_element->GetOffsetParent();
+		}
+	}
+} // namespace
+
 bool ElementUtilities::GetClippingRegion(Element* element, Rectanglei& out_clip_region, ClipMaskGeometryList* out_clip_mask_list,
 	bool force_clip_self)
 {
-	using Style::Clip;
-	Clip target_element_clip = element->GetComputedValues().clip();
-	if (target_element_clip == Clip::Type::None && !force_clip_self)
-		return false;
-
-	int num_ignored_clips = target_element_clip.GetNumber();
-
-	// Search through the element's ancestors, finding all elements that clip their overflow and have overflow to clip.
-	// For each that we find, we combine their clipping region with the existing clipping region, and so build up a
-	// complete clipping region for the element.
-	Element* clipping_element = (force_clip_self ? element : element->GetOffsetParent());
-
+	// Combine the clipping regions of all clipping ancestors to build up a complete clipping region for the element.
 	Rectanglef clip_region = Rectanglef::MakeInvalid();
 
-	while (clipping_element)
-	{
-		const bool force_clip_current_element = (force_clip_self && clipping_element == element);
-		const ComputedValues& clip_computed = clipping_element->GetComputedValues();
-		const bool overflow_clip = (clip_computed.overflow_x() != Style::Overflow::Visible || clip_computed.overflow_y() != Style::Overflow::Visible);
-		const bool clip_enabled = (overflow_clip || clip_computed.contain() == Style::Contain::Paint);
-		const bool clip_always = (clip_computed.clip() == Clip::Type::Always);
-		const bool clip_none = (clip_computed.clip() == Clip::Type::None);
-		const int clip_number = clip_computed.clip().GetNumber();
+	ForEachClippingAncestor(element, force_clip_self, [&](const ClippingAncestor& ancestor) {
+		Element* clipping_element = ancestor.element;
+		const BoxArea clip_area = ancestor.clip_area;
+		bool disable_scissor_clipping = false;
 
-		// Merge the existing clip region with the current clip region, unless we are ignoring clip regions.
-		if (((clip_always || clip_enabled) && num_ignored_clips == 0) || force_clip_current_element)
+		if (out_clip_mask_list)
 		{
-			const BoxArea clip_area = (force_clip_current_element ? BoxArea::Border : clipping_element->GetClipArea());
-			const bool has_clipping_content =
-				(clip_always || force_clip_current_element || clipping_element->GetClientWidth() < clipping_element->GetScrollWidth() - 0.5f ||
-					clipping_element->GetClientHeight() < clipping_element->GetScrollHeight() - 0.5f);
-			bool disable_scissor_clipping = false;
+			const ComputedValues& clip_computed = clipping_element->GetComputedValues();
+			const TransformState* transform_state = clipping_element->GetTransformState();
+			const Matrix4f* transform = (transform_state ? transform_state->GetTransform() : nullptr);
+			const bool has_border_radius = (clip_computed.border_top_left_radius() > 0.f || clip_computed.border_top_right_radius() > 0.f ||
+				clip_computed.border_bottom_right_radius() > 0.f || clip_computed.border_bottom_left_radius() > 0.f);
 
-			if (out_clip_mask_list)
+			// If the element has border-radius we always use a clip mask, since we can't easily predict if content is located on the curved
+			// region to be clipped. Paint containment is an exception, as it's commonly used on many rounded elements whose content fits,
+			// so it only masks overflowing content. If the element has a transform we only use a clip mask when the content clips.
+			const bool border_radius_mask = (has_border_radius && (ancestor.overflow_clip || ancestor.clip_always || ancestor.has_clipping_content));
+			if (border_radius_mask || (transform && ancestor.has_clipping_content))
 			{
-				const TransformState* transform_state = clipping_element->GetTransformState();
-				const Matrix4f* transform = (transform_state ? transform_state->GetTransform() : nullptr);
-				const bool has_border_radius = (clip_computed.border_top_left_radius() > 0.f || clip_computed.border_top_right_radius() > 0.f ||
-					clip_computed.border_bottom_right_radius() > 0.f || clip_computed.border_bottom_left_radius() > 0.f);
-
-				// If the element has border-radius we always use a clip mask, since we can't easily predict if content is located on the curved
-				// region to be clipped. Paint containment is an exception, as it's commonly used on many rounded elements whose content fits,
-				// so it only masks overflowing content. If the element has a transform we only use a clip mask when the content clips.
-				const bool border_radius_mask = (has_border_radius && (overflow_clip || clip_always || has_clipping_content));
-				if (border_radius_mask || (transform && has_clipping_content))
-				{
-					Geometry* clip_geometry = clipping_element->GetElementBackgroundBorder()->GetClipGeometry(clipping_element, clip_area);
-					const ClipMaskOperation clip_operation = (out_clip_mask_list->empty() ? ClipMaskOperation::Set : ClipMaskOperation::Intersect);
-					const Vector2f absolute_offset = clipping_element->GetAbsoluteOffset(BoxArea::Border).Round();
-					if (*clip_geometry)
-						out_clip_mask_list->push_back(ClipMaskGeometry{clip_operation, clip_geometry, absolute_offset, transform});
-				}
-
-				// If we only have border-radius then we add this element to the scissor region as well as the clip mask. This may help with e.g.
-				// culling text render calls. However, when we have a transform, the element cannot be added to the scissor region since its geometry
-				// may be projected entirely elsewhere.
-				if (transform)
-					disable_scissor_clipping = true;
+				Geometry* clip_geometry = clipping_element->GetElementBackgroundBorder()->GetClipGeometry(clipping_element, clip_area);
+				const ClipMaskOperation clip_operation = (out_clip_mask_list->empty() ? ClipMaskOperation::Set : ClipMaskOperation::Intersect);
+				const Vector2f absolute_offset = clipping_element->GetAbsoluteOffset(BoxArea::Border).Round();
+				if (*clip_geometry)
+					out_clip_mask_list->push_back(ClipMaskGeometry{clip_operation, clip_geometry, absolute_offset, transform});
 			}
 
-			if (has_clipping_content && !disable_scissor_clipping)
-			{
-				// Shrink the scissor region to the element's client area.
-				Vector2f element_offset = clipping_element->GetAbsoluteOffset(clip_area).Round();
-				Vector2f element_size = clipping_element->GetRenderBox(clip_area).GetFillSize();
-				Rectanglef element_region = Rectanglef::FromPositionSize(element_offset, element_size);
-
-				clip_region = element_region.IntersectIfValid(clip_region);
-			}
+			// If we only have border-radius then we add this element to the scissor region as well as the clip mask. This may help with e.g.
+			// culling text render calls. However, when we have a transform, the element cannot be added to the scissor region since its geometry
+			// may be projected entirely elsewhere.
+			if (transform)
+				disable_scissor_clipping = true;
 		}
 
-		// If this region is meant to clip and we're skipping regions, update the counter.
-		if (num_ignored_clips > 0 && clip_enabled)
-			num_ignored_clips--;
+		if (ancestor.has_clipping_content && !disable_scissor_clipping)
+		{
+			// Shrink the scissor region to the element's client area.
+			Vector2f element_offset = clipping_element->GetAbsoluteOffset(clip_area).Round();
+			Vector2f element_size = clipping_element->GetRenderBox(clip_area).GetFillSize();
+			Rectanglef element_region = Rectanglef::FromPositionSize(element_offset, element_size);
 
-		// Inherit how many clip regions this ancestor ignores.
-		num_ignored_clips = Math::Max(num_ignored_clips, clip_number);
-
-		// If this region ignores all clipping regions, then we do too.
-		if (clip_none)
-			break;
-
-		// Climb the tree to this region's parent.
-		clipping_element = clipping_element->GetOffsetParent();
-	}
+			clip_region = element_region.IntersectIfValid(clip_region);
+		}
+	});
 
 	if (clip_region.Valid())
 	{
@@ -211,6 +235,26 @@ bool ElementUtilities::GetClippingRegion(Element* element, Rectanglei& out_clip_
 	}
 
 	return clip_region.Valid();
+}
+
+bool ElementUtilities::GetClippingBounds(Element* element, Rectanglef& out_bounds)
+{
+	Rectanglef clip_bounds = Rectanglef::MakeInvalid();
+
+	ForEachClippingAncestor(element, false, [&](const ClippingAncestor& ancestor) {
+		// Transformed ancestors are included through the bounds of their projected clip area. Skip any that can't be projected.
+		Rectanglef region;
+		if (ancestor.has_clipping_content && GetBoundingBox(region, ancestor.element, ancestor.clip_area))
+		{
+			// Leave room for the pixel snapping of the scissor region.
+			clip_bounds = region.Extend(1.f).IntersectIfValid(clip_bounds);
+		}
+	});
+
+	if (clip_bounds.Valid())
+		out_bounds = clip_bounds;
+
+	return clip_bounds.Valid();
 }
 
 bool ElementUtilities::SetClippingRegion(Element* element, bool force_clip_self)
