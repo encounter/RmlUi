@@ -68,6 +68,31 @@ static float GetScrollOffsetDelta(ScrollAlignment alignment, float begin_offset,
 	return 0.f;
 }
 
+namespace {
+	struct ClippingBounds {
+		Rectanglef bounds;
+		bool clipped = false;
+	};
+
+	// Elements without their own 'clip' value are clipped the same as their offset parent's other children, and nothing moves while
+	// rendering. So these bounds are shared by siblings for the duration of a render pass.
+	SmallUnorderedMap<Element*, ClippingBounds> clipping_bounds_cache;
+} // namespace
+
+static bool GetSharedClippingBounds(Element* element, Rectanglef& out_bounds)
+{
+	Element* offset_parent = element->GetOffsetParent();
+	if (!offset_parent || element->GetComputedValues().clip().GetType() != Style::Clip::Type::Auto)
+		return ElementUtilities::GetClippingBounds(element, out_bounds);
+
+	auto [it, inserted] = clipping_bounds_cache.emplace(offset_parent, ClippingBounds{});
+	if (inserted)
+		it->second.clipped = ElementUtilities::GetClippingBounds(element, it->second.bounds);
+
+	out_bounds = it->second.bounds;
+	return it->second.clipped;
+}
+
 // Returns true if the given bounds in window coordinates lie outside the element's clipping region.
 static bool IsOutsideClippingRegion(Element* element, Rectanglef bounds)
 {
@@ -77,7 +102,7 @@ static bool IsOutsideClippingRegion(Element* element, Rectanglef bounds)
 
 	Rectanglef clip_bounds = Rectanglef::FromSize(Vector2f(context->GetRenderManager().GetViewport()));
 	Rectanglef element_clip_bounds;
-	if (ElementUtilities::GetClippingBounds(element, element_clip_bounds))
+	if (GetSharedClippingBounds(element, element_clip_bounds))
 		clip_bounds = clip_bounds.Intersect(element_clip_bounds);
 
 	return !clip_bounds.Intersects(bounds);
@@ -232,6 +257,10 @@ void Element::Render()
 	RMLUI_ZoneScoped;
 	RMLUI_ZoneText(name.c_str(), name.size());
 #endif
+
+	// Rendering starts from an element without a parent, such as the context root.
+	if (!parent)
+		clipping_bounds_cache.clear();
 
 	UpdateAbsoluteOffsetAndRenderBoxData();
 
