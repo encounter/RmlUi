@@ -83,6 +83,38 @@ static bool IsOutsideClippingRegion(Element* element, Rectanglef bounds)
 	return !clip_bounds.Intersects(bounds);
 }
 
+// Returns true if the element's own background, border, and decorators lie outside its clipping region. Decorators paint within the element's
+// boxes, so everything is bounded by all its boxes extended by any box shadow.
+static bool IsDecorationOutsideClippingRegion(Element* element)
+{
+	Rectanglef bounds;
+	if (!ElementUtilities::GetBoundingBox(bounds, element, BoxArea::Auto))
+		return false;
+
+	// Inline elements split across lines have additional boxes.
+	if (const int num_boxes = element->GetNumBoxes(); num_boxes > 1)
+	{
+		// Only the main box is projected by the bounding box.
+		if (const TransformState* transform_state = element->GetTransformState(); transform_state && transform_state->GetTransform())
+			return false;
+
+		Rectanglef border_bounds;
+		ElementUtilities::GetBoundingBox(border_bounds, element, BoxArea::Border);
+		const Vector2f shadow_top_left = border_bounds.TopLeft() - bounds.TopLeft();
+		const Vector2f shadow_bottom_right = bounds.BottomRight() - border_bounds.BottomRight();
+		const Vector2f origin = element->GetAbsoluteOffset(BoxArea::Border);
+		for (int i = 1; i < num_boxes; i++)
+		{
+			Vector2f offset;
+			const Box& box = element->GetBox(i, offset);
+			const Rectanglef box_bounds = Rectanglef::FromPositionSize(origin + offset, box.GetSize(BoxArea::Border));
+			bounds = bounds.Join(box_bounds.Extend(shadow_top_left, shadow_bottom_right));
+		}
+	}
+
+	return IsOutsideClippingRegion(element, bounds);
+}
+
 RMLUI_RTTI_Define(Element)
 
 Element::Element(const String& tag) :
@@ -219,14 +251,22 @@ void Element::Render()
 			return;
 	}
 
+	// Only stacking contexts render filter layers or descendants between the effect stages. For other elements, the effects and decoration can be
+	// skipped on their own when outside the clipping region, which also defers loading decorator textures until they are visible.
+	const bool render_decoration = (local_stacking_context || !IsDecorationOutsideClippingRegion(this));
+
 	ElementUtilities::ApplyTransform(*this);
 
-	meta->effects.RenderEffects(RenderStage::Enter);
+	if (render_decoration)
+		meta->effects.RenderEffects(RenderStage::Enter);
 
 	if (ElementUtilities::SetClippingRegion(this))
 	{
-		meta->background_border.Render(this);
-		meta->effects.RenderEffects(RenderStage::Decoration);
+		if (render_decoration)
+		{
+			meta->background_border.Render(this);
+			meta->effects.RenderEffects(RenderStage::Decoration);
+		}
 
 		{
 			RMLUI_ZoneScopedNC("OnRender", 0x228B22);
@@ -238,7 +278,8 @@ void Element::Render()
 		element->Render();
 
 	ElementUtilities::ApplyTransform(*this);
-	meta->effects.RenderEffects(RenderStage::Exit);
+	if (render_decoration)
+		meta->effects.RenderEffects(RenderStage::Exit);
 }
 
 ElementPtr Element::Clone() const

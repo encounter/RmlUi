@@ -71,6 +71,15 @@ TEST_CASE("ElementBackgroundBorder.render_stats")
 
 	TestsShell::RenderLoop();
 
+	// Rows outside the scroll area are not rendered, so scroll through them once to generate all geometry.
+	for (float scroll_top = 0.f; scroll_top < wrapper->GetScrollHeight(); scroll_top += 100.f)
+	{
+		wrapper->SetScrollTop(scroll_top);
+		TestsShell::RenderLoop();
+	}
+	wrapper->SetScrollTop(0.f);
+	TestsShell::RenderLoop();
+
 	TestsRenderInterface* render_interface = TestsShell::GetTestsRenderInterface();
 	if (!render_interface)
 		return;
