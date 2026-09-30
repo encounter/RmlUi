@@ -251,8 +251,10 @@ namespace HarfBuzz {
 
 				for (FT_ULong character_code = code_min; character_code <= code_max; ++character_code)
 				{
+					// Several characters can map to the same glyph, such as upper and lower case letters in icon fonts.
 					FT_UInt index = FT_Get_Char_Index(ft_face, character_code);
-					BuildGlyph(ft_face, index, static_cast<Character>(character_code), glyphs, bitmap_scaling_factor);
+					if (glyphs.find(index) == glyphs.end())
+						BuildGlyph(ft_face, index, static_cast<Character>(character_code), glyphs, bitmap_scaling_factor);
 				}
 			}
 

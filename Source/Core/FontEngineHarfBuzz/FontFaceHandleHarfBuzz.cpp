@@ -26,6 +26,13 @@ namespace HarfBuzz {
 		return (value_26_6 + 32) >> 6;
 	}
 
+	// Advances are rounded to whole pixels, like the hinted advances of the default font engine, so that the width of a string equals the sum of
+	// the widths of its parts. Layout measures text word by word, while each line is rendered as a whole.
+	static int RoundAdvance(int advance_26_6)
+	{
+		return FixedToPixels(advance_26_6) * 64;
+	}
+
 	static constexpr size_t width_cache_max_entries = 4096;
 
 	static void BuildWidthCacheKey(String& key, StringView string, const TextShapingContext& text_shaping_context)
@@ -79,7 +86,7 @@ namespace HarfBuzz {
 			return false;
 
 		// Shape with HarfBuzz's own OpenType font functions, scaled so that positions are in 26.6 fixed-point pixels like FreeType's. The
-		// advances are unhinted, and each glyph is placed at its rounded position.
+		// advances are unhinted.
 		hb_font = hb_font_create(hb_face);
 		RMLUI_ASSERT(hb_font != nullptr);
 		hb_font_set_scale(hb_font, font_size * 64, font_size * 64);
@@ -305,7 +312,8 @@ namespace HarfBuzz {
 		const hb_glyph_info_t* glyph_info = hb_buffer_get_glyph_infos(shaping_buffer, &glyph_count);
 		const hb_glyph_position_t* glyph_positions = hb_buffer_get_glyph_positions(shaping_buffer, nullptr);
 
-		const int letter_spacing = (int)Math::Round(text_shaping_context.letter_spacing * 64.f);
+		// Whole pixels of letter spacing, like the default font engine.
+		const int letter_spacing = (int)text_shaping_context.letter_spacing * 64;
 		int pen = 0;
 
 		for (int g = 0; g < (int)glyph_count; ++g)
@@ -359,7 +367,7 @@ namespace HarfBuzz {
 					ShapedGlyph{glyph_index, character, false, glyph->color_format == ColorFormat::RGBA8, Vector2i(pen + offset.x, offset.y)});
 
 			// Use the unshaped advance for unsupported characters, which are rendered from fallback fonts or as the replacement character.
-			pen += (glyph_index != 0 ? glyph_positions[g].x_advance : glyph->advance * 64) + letter_spacing;
+			pen += (glyph_index != 0 ? RoundAdvance(glyph_positions[g].x_advance) : glyph->advance * 64) + letter_spacing;
 		}
 
 		return pen;
